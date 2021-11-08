@@ -44,6 +44,26 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 
 	options := parseOptions(opts)
 
+	// check special types first
+	switch v.Type() {
+	case timeType:
+		if options.timeType == TagUTCTime {
+			b, err := encodeUTCTime(v)
+			if err != nil {
+				return err
+			}
+			e.buf.Write(b)
+			tag = TagUTCTime
+		} else {
+			b, err := encodeGeneralizedTime(v)
+			if err != nil {
+				return err
+			}
+			e.buf.Write(b)
+			tag = TagGeneralizedTime
+		}
+	}
+
 	if e.buf.Len() == 0 {
 		switch v.Kind() {
 		case reflect.Bool:
@@ -60,6 +80,17 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 			}
 			e.buf.Write(b)
 			tag = TagInteger
+		case reflect.String:
+			b, err := encodeString(v)
+			if err != nil {
+				return err
+			}
+			e.buf.Write(b)
+			if options.stringType != 0 {
+				tag = options.stringType
+			} else {
+				tag = TagPrintableString
+			}
 		default:
 			return fmt.Errorf("unsupported go type '%s'", v.Type())
 		}
