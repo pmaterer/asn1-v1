@@ -53,6 +53,13 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 			}
 			e.buf.Write(b)
 			tag = TagBoolean
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			b, err := encodeInt(v)
+			if err != nil {
+				return err
+			}
+			e.buf.Write(b)
+			tag = TagInteger
 		default:
 			return fmt.Errorf("unsupported go type '%s'", v.Type())
 		}
