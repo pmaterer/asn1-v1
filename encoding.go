@@ -7,6 +7,10 @@ import (
 	"reflect"
 )
 
+const (
+	tagKey = "asn1"
+)
+
 func Marshal(v interface{}) ([]byte, error) {
 	return MarshalWithOptions(v, "")
 }
@@ -46,6 +50,13 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 
 	// check special types first
 	switch v.Type() {
+	case oidType:
+		b, err := encodeObjectIdentifier(v)
+		if err != nil {
+			return err
+		}
+		e.buf.Write(b)
+		tag = TagObjectIdentifier
 	case timeType:
 		if options.timeType == TagUTCTime {
 			b, err := encodeUTCTime(v)
@@ -80,6 +91,13 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 			}
 			e.buf.Write(b)
 			tag = TagInteger
+		case reflect.Float32, reflect.Float64:
+			b, err := encodeReal(v)
+			if err != nil {
+				return err
+			}
+			e.buf.Write(b)
+			tag = TagReal
 		case reflect.String:
 			b, err := encodeString(v)
 			if err != nil {
@@ -90,6 +108,23 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 				tag = options.stringType
 			} else {
 				tag = TagPrintableString
+			}
+		case reflect.Struct:
+			b, err := encodeStruct(v)
+			if err != nil {
+				return err
+			}
+			e.buf.Write(b)
+			primitive = false
+			tag = TagSequence
+		case reflect.Array, reflect.Slice:
+			if v.Type().Elem().Kind() == reflect.Uint8 {
+				b, err := encodeOctetString(v)
+				if err != nil {
+					return err
+				}
+				e.buf.Write(b)
+				tag = TagOctetString
 			}
 		default:
 			return fmt.Errorf("unsupported go type '%s'", v.Type())
@@ -108,7 +143,10 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 	e.encodeLength(body)
 	e.buf.Write(body)
 
-	e.w.Write(e.buf.Bytes())
+	_, err := e.w.Write(e.buf.Bytes())
+	if err != nil {
+		return err
+	}
 
 	return nil
 
