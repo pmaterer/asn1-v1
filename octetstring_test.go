@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var defaultByteSlice []byte
+
 func TestOctetString(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -31,6 +33,12 @@ func TestOctetString(t *testing.T) {
 			expected:    []byte{0x22, 0xff, 0xa2, 0x02},
 			value:       []int{1, 20, 5},
 			errExpected: true,
+		},
+		{
+			name:        "Test encode octet string default",
+			expected:    nil,
+			value:       defaultByteSlice,
+			errExpected: false,
 		},
 	}
 

@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var defaultInt int
+
 func TestEncodeInteger(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -43,6 +45,12 @@ func TestEncodeInteger(t *testing.T) {
 			expected:    []byte{0xfd, 0x6f},
 			value:       "55",
 			errExpected: true,
+		},
+		{
+			name:        "Test encode integer default",
+			expected:    []byte{0x00},
+			value:       defaultInt,
+			errExpected: false,
 		},
 	}
 

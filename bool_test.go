@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var defaultBool bool
+
 func TestEncodeBool(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -26,6 +28,12 @@ func TestEncodeBool(t *testing.T) {
 			value:       66,
 			errExpected: true,
 		},
+		{
+			name:        "Test encode bool default",
+			expected:    []byte{0x00},
+			value:       defaultBool,
+			errExpected: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -35,6 +43,7 @@ func TestEncodeBool(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.Equal(t, tt.expected, b)
+				assert.Nil(t, err)
 			}
 		})
 	}

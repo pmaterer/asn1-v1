@@ -2,6 +2,7 @@ package asn1
 
 type options struct {
 	private    bool
+	enumerated bool
 	stringType Tag
 	timeType   Tag
 }
@@ -17,6 +18,8 @@ func parseOptions(optionsStr string) (opts options) {
 			opts.stringType = TagIA5String
 		case option == "utc":
 			opts.timeType = TagUTCTime
+		case option == "enumerated":
+			opts.enumerated = true
 		}
 	}
 
