@@ -19,9 +19,9 @@ const (
 	TagRelativeOID      Tag = 0x0d
 	TagTime             Tag = 0x0e
 
-	TagSequence        Tag = 0x30
+	TagSequence        Tag = 0x10
 	TagSequenceOf      Tag = TagSequence
-	TagSet             Tag = 0x31
+	TagSet             Tag = 0x11
 	TagSetOf           Tag = TagSet
 	TagNumericString   Tag = 0x12
 	TagPrintableString Tag = 0x13

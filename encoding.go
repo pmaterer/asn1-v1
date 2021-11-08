@@ -116,7 +116,7 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 			}
 			e.buf.Write(b)
 			primitive = false
-			tag = TagSequence
+			tag = TagSet
 		case reflect.Array, reflect.Slice:
 			if v.Type().Elem().Kind() == reflect.Uint8 {
 				b, err := encodeOctetString(v)
@@ -125,6 +125,14 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 				}
 				e.buf.Write(b)
 				tag = TagOctetString
+			} else {
+				b, err := encodeSequence(v)
+				if err != nil {
+					return err
+				}
+				e.buf.Write(b)
+				tag = TagSequence
+				primitive = false
 			}
 		default:
 			return fmt.Errorf("unsupported go type '%s'", v.Type())
@@ -210,6 +218,24 @@ func (e *Encoder) encodeLength(body []byte) {
 	b.Write(encodeUint(uint64(header)))
 	b.Write(lengthBytes)
 	e.buf.Write(b.Bytes())
+}
+
+func encodeSequence(v reflect.Value) ([]byte, error) {
+	switch v.Kind() {
+	case reflect.Array, reflect.Slice:
+	default:
+		return nil, invalidTypeError("array/slice", v)
+	}
+
+	buf := new(bytes.Buffer)
+	for i := 0; i < v.Len(); i++ {
+		b, err := Marshal(v.Index(i).Interface())
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(b)
+	}
+	return buf.Bytes(), nil
 }
 
 func invalidTypeError(expected string, value reflect.Value) error {
