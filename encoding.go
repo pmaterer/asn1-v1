@@ -176,25 +176,10 @@ func (e *Encoder) encodeIdentifier(class TagClass, tag Tag, primitive bool) {
 		b[0] |= byte(tag)
 	} else {
 		b[0] |= byte(0x1f)
-		b = append(b, encodeHighTag(tag)...)
+		b = append(b, encodeBase128(uint64(tag))...)
 	}
 
 	e.buf.Write(b)
-}
-
-func encodeHighTag(tag Tag) []byte {
-	buf := new(bytes.Buffer)
-
-	for tag != 0 {
-		t := tag & 0x7f
-		tag >>= 7
-		if len(buf.Bytes()) != 0 {
-			t |= 0x80
-		}
-		buf.WriteByte(byte(t))
-	}
-
-	return reverseBytes(buf.Bytes())
 }
 
 func (e *Encoder) encodeLength(body []byte) {

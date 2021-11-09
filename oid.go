@@ -71,30 +71,9 @@ func encodeObjectIdentifier(value reflect.Value) ([]byte, error) {
 	b.Write(initialIDEnc)
 
 	for i := 1; i < len(oid.Subidentifiers); i++ {
-		sid := oid.Subidentifiers[i]
-		sidEnc := encodeSubidentifier(sid)
-		if err != nil {
-			return nil, err
-		}
-		b.Write(sidEnc)
+		sid := encodeBase128(oid.Subidentifiers[i])
+		b.Write(sid)
 	}
 
 	return b.Bytes(), nil
-}
-
-func encodeSubidentifier(sid uint64) []byte {
-	buf := new(bytes.Buffer)
-
-	for sid != 0 {
-		i := sid & 0x7f
-		sid >>= 7
-
-		// bit 8 = 1 in every byte except last
-		if len(buf.Bytes()) != 0 {
-			i |= 0x80
-		}
-		buf.WriteByte(byte(i))
-	}
-
-	return reverseBytes(buf.Bytes())
 }

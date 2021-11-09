@@ -1,6 +1,9 @@
 package asn1
 
-import "strings"
+import (
+	"bytes"
+	"strings"
+)
 
 func cut(s, sep string) (before, after string, found bool) {
 	if i := strings.Index(s, sep); i >= 0 {
@@ -33,4 +36,21 @@ func uintLength(i uint64) (length int) {
 		i >>= 8
 	}
 	return
+}
+
+// https://en.wikipedia.org/wiki/Variable-length_quantity
+func encodeBase128(num uint64) []byte {
+	buf := new(bytes.Buffer)
+
+	for num != 0 {
+		i := num & 0x7f
+		num >>= 7
+
+		if len(buf.Bytes()) != 0 {
+			i |= 0x80
+		}
+		buf.WriteByte(byte(i))
+	}
+
+	return reverseBytes(buf.Bytes())
 }
