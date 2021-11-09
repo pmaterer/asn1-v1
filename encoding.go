@@ -25,8 +25,9 @@ func MarshalWithOptions(v interface{}, opts string) ([]byte, error) {
 }
 
 type Encoder struct {
-	w   io.Writer
-	buf *bytes.Buffer
+	w            io.Writer
+	buf          *bytes.Buffer
+	encodingFunc func(reflect.Value) ([]byte, error)
 }
 
 func NewEncoder(w io.Writer) *Encoder {
@@ -51,92 +52,61 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 	// check special types first
 	switch v.Type() {
 	case oidType:
-		b, err := encodeObjectIdentifier(v)
-		if err != nil {
-			return err
-		}
-		e.buf.Write(b)
+		e.encodingFunc = encodeObjectIdentifier
 		tag = TagObjectIdentifier
 	case timeType:
 		if options.timeType == TagUTCTime {
-			b, err := encodeUTCTime(v)
-			if err != nil {
-				return err
-			}
-			e.buf.Write(b)
+			e.encodingFunc = encodeUTCTime
 			tag = TagUTCTime
 		} else {
-			b, err := encodeGeneralizedTime(v)
-			if err != nil {
-				return err
-			}
-			e.buf.Write(b)
+			e.encodingFunc = encodeGeneralizedTime
 			tag = TagGeneralizedTime
 		}
 	}
 
-	if e.buf.Len() == 0 {
+	if e.encodingFunc == nil {
 		switch v.Kind() {
 		case reflect.Bool:
-			b, err := encodeBool(v)
-			if err != nil {
-				return err
-			}
-			e.buf.Write(b)
+			e.encodingFunc = encodeBool
 			tag = TagBoolean
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			b, err := encodeInt(v)
-			if err != nil {
-				return err
-			}
-			e.buf.Write(b)
+			e.encodingFunc = encodeInt
 			tag = TagInteger
 		case reflect.Float32, reflect.Float64:
-			b, err := encodeReal(v)
-			if err != nil {
-				return err
-			}
-			e.buf.Write(b)
+			e.encodingFunc = encodeReal
 			tag = TagReal
 		case reflect.String:
-			b, err := encodeString(v)
-			if err != nil {
-				return err
-			}
-			e.buf.Write(b)
+			e.encodingFunc = encodeString
 			if options.stringType != 0 {
 				tag = options.stringType
 			} else {
 				tag = TagPrintableString
 			}
 		case reflect.Struct:
-			b, err := encodeStruct(v)
-			if err != nil {
-				return err
-			}
-			e.buf.Write(b)
+			e.encodingFunc = encodeStruct
 			primitive = false
 			tag = TagSet
 		case reflect.Array, reflect.Slice:
 			if v.Type().Elem().Kind() == reflect.Uint8 {
-				b, err := encodeOctetString(v)
-				if err != nil {
-					return err
-				}
-				e.buf.Write(b)
+				e.encodingFunc = encodeOctetString
 				tag = TagOctetString
 			} else {
-				b, err := encodeSequence(v)
-				if err != nil {
-					return err
-				}
-				e.buf.Write(b)
+				e.encodingFunc = encodeSequence
 				tag = TagSequence
 				primitive = false
 			}
 		default:
 			return fmt.Errorf("unsupported go type '%s'", v.Type())
 		}
+	}
+
+	b, err := e.encodingFunc(v)
+	if err != nil {
+		return err
+	}
+	_, err = e.buf.Write(b)
+	if err != nil {
+		return err
 	}
 
 	if options.private {
@@ -151,7 +121,7 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 	e.encodeLength(body)
 	e.buf.Write(body)
 
-	_, err := e.w.Write(e.buf.Bytes())
+	_, err = e.w.Write(e.buf.Bytes())
 	if err != nil {
 		return err
 	}
