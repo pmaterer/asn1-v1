@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEncodeString(t *testing.T) {
+func TestEncodeBitString(t *testing.T) {
 	tests := []struct {
 		name        string
 		expected    []byte
@@ -15,57 +15,59 @@ func TestEncodeString(t *testing.T) {
 		errExpected bool
 	}{
 		{
-			name:        "Test encode string",
-			expected:    []byte{0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72},
-			value:       "foobar",
+			name:        "Test encode bit string",
+			expected:    []byte{0x07, 0x68, 0x80},
+			value:       "011010001",
 			errExpected: false,
 		},
 		{
-			name:        "Test encode string error",
+			name:        "Test encode bit string",
+			expected:    []byte{0x06, 0x6e, 0x5d, 0xc0},
+			value:       "011011100101110111",
+			errExpected: false,
+		},
+		{
+			name:        "Test encode bit string error",
 			expected:    []byte{},
-			value:       1582,
+			value:       "0x9a",
 			errExpected: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := encodeString(reflect.ValueOf(tt.value))
+			b, err := EncodeBitString(reflect.ValueOf(tt.value))
 			if tt.errExpected {
 				assert.Error(t, err)
 			} else {
 				assert.Equal(t, tt.expected, b)
+				assert.Nil(t, err)
 			}
 		})
 	}
 }
 
-func TestIsValidPrintableString(t *testing.T) {
+func TestIsValidBitString(t *testing.T) {
 	tests := []struct {
 		name     string
 		expected bool
 		value    string
 	}{
 		{
-			name:     "Test encode proper printable string",
+			name:     "Test encode proper bit string",
 			expected: true,
-			value:    "print('Woah')",
+			value:    "0101101011",
 		},
 		{
-			name:     "Test encode bad printable string",
+			name:     "Test encode bad bit string",
 			expected: false,
-			value:    "nuh uh uh!",
-		},
-		{
-			name:     "Test encode bad printable string",
-			expected: false,
-			value:    "#asn1",
+			value:    "01011a",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ok := isValidPrintableString(tt.value)
+			ok := isValidBitString(tt.value)
 			assert.Equal(t, tt.expected, ok)
 		})
 	}

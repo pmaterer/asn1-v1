@@ -55,12 +55,12 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 		e.encodingFunc = encodeObjectIdentifier
 		tag = TagObjectIdentifier
 	case timeType:
-		if options.timeType == TagUTCTime {
+		tag = options.timeType
+		switch options.timeType {
+		case TagUTCTime:
 			e.encodingFunc = encodeUTCTime
-			tag = TagUTCTime
-		} else {
+		default:
 			e.encodingFunc = encodeGeneralizedTime
-			tag = TagGeneralizedTime
 		}
 	}
 
@@ -71,16 +71,25 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 			tag = TagBoolean
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			e.encodingFunc = encodeInt
-			tag = TagInteger
+			if options.enumerated {
+				tag = TagEnumerated
+			} else {
+				tag = TagInteger
+			}
+
 		case reflect.Float32, reflect.Float64:
 			e.encodingFunc = encodeReal
 			tag = TagReal
 		case reflect.String:
+			tag = options.stringType
 			e.encodingFunc = encodeString
-			if options.stringType != 0 {
-				tag = options.stringType
-			} else {
-				tag = TagPrintableString
+			switch options.stringType {
+			case TagPrintableString:
+				if !isValidPrintableString(v.String()) {
+					return fmt.Errorf("string not valid printablestring")
+				}
+			case TagBitString:
+				e.encodingFunc = EncodeBitString
 			}
 		case reflect.Struct:
 			e.encodingFunc = encodeStruct
