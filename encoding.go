@@ -27,14 +27,18 @@ func MarshalWithOptions(v interface{}, opts string) ([]byte, error) {
 type Encoder struct {
 	w            io.Writer
 	buf          *bytes.Buffer
+	bodyBuf      *bytes.Buffer
 	encodingFunc func(reflect.Value) ([]byte, error)
+	options      *options
 }
 
 func NewEncoder(w io.Writer) *Encoder {
 	buf := new(bytes.Buffer)
+	bodyBuf := new(bytes.Buffer)
 	return &Encoder{
-		w:   w,
-		buf: buf,
+		w:       w,
+		buf:     buf,
+		bodyBuf: bodyBuf,
 	}
 }
 
@@ -42,21 +46,14 @@ func (e *Encoder) Encode(v interface{}, opts string) error {
 	return e.encode(reflect.ValueOf(v), opts)
 }
 
-func (e *Encoder) encode(v reflect.Value, opts string) error {
-	var tag Tag
-	primitive := true
-	class := TagClassUniversal
-
-	options := parseOptions(opts)
-
-	// check special types first
+func (e *Encoder) parseType(v reflect.Value) (tag Tag, isConstructed bool, err error) {
 	switch v.Type() {
 	case oidType:
 		e.encodingFunc = encodeObjectIdentifier
 		tag = TagObjectIdentifier
 	case timeType:
-		tag = options.timeType
-		switch options.timeType {
+		tag = e.options.timeType
+		switch e.options.timeType {
 		case TagUTCTime:
 			e.encodingFunc = encodeUTCTime
 		default:
@@ -71,29 +68,32 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 			tag = TagBoolean
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			e.encodingFunc = encodeInt
-			if options.enumerated {
-				tag = TagEnumerated
-			} else {
-				tag = TagInteger
-			}
-
+			tag = TagInteger
 		case reflect.Float32, reflect.Float64:
 			e.encodingFunc = encodeReal
 			tag = TagReal
 		case reflect.String:
-			tag = options.stringType
+			tag = e.options.stringType
 			e.encodingFunc = encodeString
-			switch options.stringType {
+			switch e.options.stringType {
 			case TagPrintableString:
 				if !isValidPrintableString(v.String()) {
-					return fmt.Errorf("string not valid printablestring")
+					return tag, isConstructed, fmt.Errorf("string not valid printablestring")
+				}
+			case TagIA5String:
+				if !isValidIA5String(v.String()) {
+					return tag, isConstructed, fmt.Errorf("string not valid ia5string")
+				}
+			case TagNumericString:
+				if !isValidNumericString(v.String()) {
+					return tag, isConstructed, fmt.Errorf("string not valid numeric string")
 				}
 			case TagBitString:
 				e.encodingFunc = EncodeBitString
 			}
 		case reflect.Struct:
 			e.encodingFunc = encodeStruct
-			primitive = false
+			isConstructed = true
 			tag = TagSet
 		case reflect.Array, reflect.Slice:
 			if v.Type().Elem().Kind() == reflect.Uint8 {
@@ -102,33 +102,75 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 			} else {
 				e.encodingFunc = encodeSequence
 				tag = TagSequence
-				primitive = false
+				isConstructed = true
 			}
 		default:
-			return fmt.Errorf("unsupported go type '%s'", v.Type())
+			return tag, isConstructed, fmt.Errorf("unsupported go type '%s'", v.Type())
 		}
 	}
+	return tag, isConstructed, nil
+}
 
-	b, err := e.encodingFunc(v)
+func (e *Encoder) encode(v reflect.Value, opts string) error {
+
+	options, err := parseOptions(opts)
 	if err != nil {
 		return err
 	}
-	_, err = e.buf.Write(b)
+	e.options = options
+
+	tag, isConstructed, err := e.parseType(v)
 	if err != nil {
 		return err
+	}
+
+	if options.explicit {
+		if options.tag == nil {
+			return fmt.Errorf("flag 'explicit' requires flag 'tag' to be set")
+		}
+		body, err := e.encodingFunc(v)
+		if err != nil {
+			return err
+		}
+		e.bodyBuf.Write(body)
+
+		e.encodeHeader(TagClassUniversal, tag, true)
+		e.buf.Write(e.bodyBuf.Bytes())
+
+		e.bodyBuf.Reset()
+		e.bodyBuf.Write(e.buf.Bytes())
+		e.buf.Reset()
+
+		isConstructed = true
+	}
+
+	emptyValue := empty(v)
+	if !emptyValue && !options.optional && e.bodyBuf.Len() == 0 {
+		body, err := e.encodingFunc(v)
+		if err != nil {
+			return err
+		}
+		e.bodyBuf.Write(body)
+	}
+
+	class := TagClassUniversal
+	if options.tag != nil {
+		if options.application {
+			class = TagClassApplication
+		} else if options.private {
+			class = TagClassPrivate
+		} else {
+			class = TagClassContextSpecific
+		}
+		tag = Tag(*options.tag)
 	}
 
 	if options.private {
 		class = TagClassPrivate
 	}
 
-	body := make([]byte, e.buf.Len())
-	copy(body, e.buf.Bytes())
-	e.buf.Reset()
-
-	e.encodeIdentifier(class, tag, primitive)
-	e.encodeLength(body)
-	e.buf.Write(body)
+	e.encodeHeader(class, tag, isConstructed)
+	e.buf.Write(e.bodyBuf.Bytes())
 
 	_, err = e.w.Write(e.buf.Bytes())
 	if err != nil {
@@ -139,15 +181,20 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 
 }
 
-func (e *Encoder) encodeIdentifier(class TagClass, tag Tag, primitive bool) {
+func (e *Encoder) encodeHeader(class TagClass, tag Tag, isConstructed bool) {
+	e.encodeIdentifier(class, tag, isConstructed)
+	e.encodeLength()
+}
+
+func (e *Encoder) encodeIdentifier(class TagClass, tag Tag, isConstructed bool) {
 	b := []byte{0x00}
 
 	b[0] |= byte(class << 6)
 
-	if primitive {
-		b[0] |= byte(0 << 5)
-	} else {
+	if isConstructed {
 		b[0] |= byte(1 << 5)
+	} else {
+		b[0] |= byte(0 << 5)
 	}
 
 	// universal tags 0-30
@@ -161,11 +208,11 @@ func (e *Encoder) encodeIdentifier(class TagClass, tag Tag, primitive bool) {
 	e.buf.Write(b)
 }
 
-func (e *Encoder) encodeLength(body []byte) {
+func (e *Encoder) encodeLength() {
 	// only definite form supported
 	// length encoded as unsigned binary integers
 
-	length := len(body)
+	length := e.bodyBuf.Len()
 	b := new(bytes.Buffer)
 
 	lengthBytes := encodeUint(uint64(length))

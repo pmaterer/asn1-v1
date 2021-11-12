@@ -81,9 +81,33 @@ ASN.1 has many string types:
 |`VisibleString`|26||
 
 
-## Explicitly vs Implicitly Tagged Types
+## Explicit/Implicit Tags
 
-An **implicitly** tagged type is derived from another type by changing the tag of the underlying type.
+ASN.1 has `IMPLICIT` and `EXPLICIT` tags. 
+
+`IMPLICIT` tags are derived from other types by changing the tag of the underlying type. ASN.1 notation:
+
+**[*[class]* *number*]** `IMPLICIT` ***Type***
+
+***class = *** `UNIVERSAL` | `APPLICATION` | `PRIVATE`
+
+**Note**: The `IMPLICIT` keyword is optional in ASN.1 modules.
+
+If there is no class name, the tag's class is Context-specific (which can only be a component of a structured or `CHOICE` type).
+
+### Implicit Exaple
+
+ASN.1 notation:
+
+```asn1
+[5] IMPLICIT UTF8String
+```
+
+1. Encode "hi"
+2. The identifier octet would be encoded as:
+   1. `10` - Context-specific defaults
+   2. `0` - primitive
+   3. `101` - 5
 
 ## Todo
 
