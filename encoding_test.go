@@ -1,46 +1,73 @@
 package asn1
 
 import (
-	"bytes"
-	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func createBytes(size int) []byte {
-	rand.Seed(time.Now().UnixNano())
-	b := make([]byte, size)
-	rand.Read(b)
-	return b
-}
-
-func TestEncodeLength(t *testing.T) {
+func TestEncoding(t *testing.T) {
 	tests := []struct {
-		name     string
-		expected []byte
-		value    []byte
+		name        string
+		expected    []byte
+		value       interface{}
+		options     string
+		errExpected bool
 	}{
 		{
-			name:     "Test length short",
-			expected: []byte{0x19},
-			value:    createBytes(0x19),
+			name:        "Test encode printable string",
+			expected:    []byte{0x13, 0x02, 0x68, 0x69},
+			value:       "hi",
+			options:     "printable",
+			errExpected: false,
 		},
 		{
-			name:     "Test length long",
-			expected: []byte{0x82, 0x01, 0xb3},
-			value:    createBytes(0x1b3),
+			name:        "Test encode ia5string",
+			expected:    []byte{0x16, 0x02, 0x68, 0x69},
+			value:       "hi",
+			options:     "ia5",
+			errExpected: false,
+		},
+		{
+			name:        "Test encode utf8string",
+			expected:    []byte{0x0c, 0x04, 0xf0, 0x9f, 0x98, 0x8e},
+			value:       "😎",
+			options:     "utf8",
+			errExpected: false,
+		},
+		{
+			name:        "Test encode utc time",
+			expected:    []byte{0x17, 0x11, 0x31, 0x39, 0x31, 0x32, 0x31, 0x35, 0x31, 0x39, 0x30, 0x32, 0x31, 0x30, 0x2d, 0x30, 0x38, 0x30, 0x30},
+			value:       time.Date(2019, time.December, 15, 19, 02, 10, 0, time.FixedZone("UTC-8", -8*60*60)),
+			options:     "utc",
+			errExpected: false,
+		},
+		{
+			name:        "Test encode oid",
+			expected:    []byte{0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b},
+			value:       ObjectIdentifier{Root: 1, Subidentifiers: []uint64{2, 840, 113549, 1, 1, 11}},
+			options:     "",
+			errExpected: false,
+		},
+		{
+			name:        "Test encode octet string",
+			expected:    []byte{0x04, 0x04, 0x03, 0x02, 0x06, 0xa0},
+			value:       []byte{0x03, 0x02, 0x06, 0xa0},
+			options:     "",
+			errExpected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := new(bytes.Buffer)
-			enc := NewEncoder(buf)
-			enc.bodyBuf.Write(tt.value)
-			enc.encodeLength()
-			assert.Equal(t, tt.expected, enc.buf.Bytes())
+			enc, err := MarshalWithOptions(tt.value, tt.options)
+			if tt.errExpected {
+				assert.Error(t, err)
+			} else {
+				assert.Equal(t, tt.expected, enc)
+			}
+
 		})
 	}
 }

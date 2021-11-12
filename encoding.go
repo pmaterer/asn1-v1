@@ -27,18 +27,16 @@ func MarshalWithOptions(v interface{}, opts string) ([]byte, error) {
 type Encoder struct {
 	w            io.Writer
 	buf          *bytes.Buffer
-	bodyBuf      *bytes.Buffer
+	datagram     *datagram
 	encodingFunc func(reflect.Value) ([]byte, error)
 	options      *options
 }
 
 func NewEncoder(w io.Writer) *Encoder {
 	buf := new(bytes.Buffer)
-	bodyBuf := new(bytes.Buffer)
 	return &Encoder{
-		w:       w,
-		buf:     buf,
-		bodyBuf: bodyBuf,
+		w:   w,
+		buf: buf,
 	}
 }
 
@@ -46,7 +44,10 @@ func (e *Encoder) Encode(v interface{}, opts string) error {
 	return e.encode(reflect.ValueOf(v), opts)
 }
 
-func (e *Encoder) parseType(v reflect.Value) (tag Tag, isConstructed bool, err error) {
+func (e *Encoder) parseType(v reflect.Value) (err error) {
+	var tag Tag
+	var isConstructed bool
+
 	switch v.Type() {
 	case oidType:
 		e.encodingFunc = encodeObjectIdentifier
@@ -78,15 +79,15 @@ func (e *Encoder) parseType(v reflect.Value) (tag Tag, isConstructed bool, err e
 			switch e.options.stringType {
 			case TagPrintableString:
 				if !isValidPrintableString(v.String()) {
-					return tag, isConstructed, fmt.Errorf("string not valid printablestring")
+					return fmt.Errorf("string not valid printablestring")
 				}
 			case TagIA5String:
 				if !isValidIA5String(v.String()) {
-					return tag, isConstructed, fmt.Errorf("string not valid ia5string")
+					return fmt.Errorf("string not valid ia5string")
 				}
 			case TagNumericString:
 				if !isValidNumericString(v.String()) {
-					return tag, isConstructed, fmt.Errorf("string not valid numeric string")
+					return fmt.Errorf("string not valid numeric string")
 				}
 			case TagBitString:
 				e.encodingFunc = EncodeBitString
@@ -105,23 +106,42 @@ func (e *Encoder) parseType(v reflect.Value) (tag Tag, isConstructed bool, err e
 				isConstructed = true
 			}
 		default:
-			return tag, isConstructed, fmt.Errorf("unsupported go type '%s'", v.Type())
+			return fmt.Errorf("unsupported go type '%s'", v.Type())
 		}
 	}
-	return tag, isConstructed, nil
+
+	e.datagram.identifier.tag = tag
+	e.datagram.isConstructed = isConstructed
+
+	return nil
 }
 
 func (e *Encoder) encode(v reflect.Value, opts string) error {
 
+	e.datagram = newDatagram()
 	options, err := parseOptions(opts)
 	if err != nil {
 		return err
 	}
 	e.options = options
 
-	tag, isConstructed, err := e.parseType(v)
+	err = e.parseType(v)
 	if err != nil {
 		return err
+	}
+
+	body, err := e.encodingFunc(v)
+	if err != nil {
+		return err
+	}
+	e.datagram.body = body
+
+	if empty(v) {
+		if options.optional {
+			e.datagram.body = nil
+		} else {
+			return fmt.Errorf("empty body!")
+		}
 	}
 
 	if options.explicit {
@@ -132,45 +152,37 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 		if err != nil {
 			return err
 		}
-		e.bodyBuf.Write(body)
 
-		e.encodeHeader(TagClassUniversal, tag, true)
-		e.buf.Write(e.bodyBuf.Bytes())
-
-		e.bodyBuf.Reset()
-		e.bodyBuf.Write(e.buf.Bytes())
-		e.buf.Reset()
-
-		isConstructed = true
-	}
-
-	emptyValue := empty(v)
-	if !emptyValue && !options.optional && e.bodyBuf.Len() == 0 {
-		body, err := e.encodingFunc(v)
-		if err != nil {
-			return err
+		innerBody := &datagram{
+			identifier: identifier{
+				class:         TagClassUniversal,
+				tag:           e.datagram.identifier.tag,
+				isConstructed: false,
+			},
+			body: body,
 		}
-		e.bodyBuf.Write(body)
+		b := innerBody.encode()
+		e.datagram.body = b
+		e.datagram.identifier.isConstructed = true
 	}
 
-	class := TagClassUniversal
+	e.datagram.identifier.class = TagClassUniversal
 	if options.tag != nil {
 		if options.application {
-			class = TagClassApplication
+			e.datagram.identifier.class = TagClassApplication
 		} else if options.private {
-			class = TagClassPrivate
+			e.datagram.identifier.class = TagClassPrivate
 		} else {
-			class = TagClassContextSpecific
+			e.datagram.identifier.class = TagClassContextSpecific
 		}
-		tag = Tag(*options.tag)
+		e.datagram.identifier.tag = Tag(*options.tag)
 	}
 
 	if options.private {
-		class = TagClassPrivate
+		e.datagram.identifier.class = TagClassPrivate
 	}
 
-	e.encodeHeader(class, tag, isConstructed)
-	e.buf.Write(e.bodyBuf.Bytes())
+	e.buf.Write(e.datagram.encode())
 
 	_, err = e.w.Write(e.buf.Bytes())
 	if err != nil {
@@ -179,56 +191,6 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 
 	return nil
 
-}
-
-func (e *Encoder) encodeHeader(class TagClass, tag Tag, isConstructed bool) {
-	e.encodeIdentifier(class, tag, isConstructed)
-	e.encodeLength()
-}
-
-func (e *Encoder) encodeIdentifier(class TagClass, tag Tag, isConstructed bool) {
-	b := []byte{0x00}
-
-	b[0] |= byte(class << 6)
-
-	if isConstructed {
-		b[0] |= byte(1 << 5)
-	} else {
-		b[0] |= byte(0 << 5)
-	}
-
-	// universal tags 0-30
-	if tag <= 30 {
-		b[0] |= byte(tag)
-	} else {
-		b[0] |= byte(0x1f)
-		b = append(b, encodeBase128(uint64(tag))...)
-	}
-
-	e.buf.Write(b)
-}
-
-func (e *Encoder) encodeLength() {
-	// only definite form supported
-	// length encoded as unsigned binary integers
-
-	length := e.bodyBuf.Len()
-	b := new(bytes.Buffer)
-
-	lengthBytes := encodeUint(uint64(length))
-
-	// short form
-	if length <= 0x7f {
-		e.buf.Write(lengthBytes)
-		return
-	}
-
-	// long form
-	header := len(lengthBytes) | 0x80
-
-	b.Write(encodeUint(uint64(header)))
-	b.Write(lengthBytes)
-	e.buf.Write(b.Bytes())
 }
 
 func encodeSequence(v reflect.Value) ([]byte, error) {

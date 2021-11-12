@@ -15,7 +15,7 @@ func encodeUTCTime(value reflect.Value) ([]byte, error) {
 	}
 	t := value.Interface().(time.Time)
 	// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.5.1
-	utcTime := t.UTC().Format("060102150405Z")
+	utcTime := t.Format("060102150405-0700")
 	return []byte(utcTime), nil
 }
 
