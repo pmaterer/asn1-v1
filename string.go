@@ -2,6 +2,7 @@ package asn1
 
 import (
 	"reflect"
+	"unicode"
 )
 
 func encodeString(value reflect.Value) ([]byte, error) {
@@ -13,8 +14,8 @@ func encodeString(value reflect.Value) ([]byte, error) {
 }
 
 // https://en.wikipedia.org/wiki/PrintableString
-func isValidPrintableString(str string) bool {
-	for _, c := range str {
+func isValidPrintableString(s string) bool {
+	for _, c := range s {
 		switch {
 		case c >= 'a' && c <= 'z':
 		case c >= 'A' && c <= 'Z':
@@ -25,6 +26,24 @@ func isValidPrintableString(str string) bool {
 			default:
 				return false
 			}
+		}
+	}
+	return true
+}
+
+func isValidIA5String(s string) bool {
+	for _, c := range s {
+		if c > 128 {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidNumericString(s string) bool {
+	for _, c := range s {
+		if !unicode.IsDigit(c) || c != ' ' {
+			return false
 		}
 	}
 	return true

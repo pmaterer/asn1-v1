@@ -2,6 +2,7 @@ package asn1
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 )
 
@@ -53,4 +54,9 @@ func encodeBase128(num uint64) []byte {
 	}
 
 	return reverseBytes(buf.Bytes())
+}
+
+func empty(value reflect.Value) bool {
+	defaultValue := reflect.Zero(value.Type())
+	return reflect.DeepEqual(value.Interface(), defaultValue.Interface())
 }

@@ -38,7 +38,8 @@ func TestEncodeLength(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := new(bytes.Buffer)
 			enc := NewEncoder(buf)
-			enc.encodeLength(tt.value)
+			enc.bodyBuf.Write(tt.value)
+			enc.encodeLength()
 			assert.Equal(t, tt.expected, enc.buf.Bytes())
 		})
 	}
