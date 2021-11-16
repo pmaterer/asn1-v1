@@ -4,7 +4,7 @@
 
 ## Basic Encoding Rules (BER)
 
-BER uses a [type-length-value](https://en.wikipedia.org/wiki/Type%E2%80%93length%E2%80%93value) encoding scheme. Encoded data will be structured as follows:
+BER uses a [type-length-value](https://en.wikipedia.org/wiki/Type%E2%80%93length%E2%80%93value) encoding scheme. Encoded data is structured as such:
 
 ![](./docs/encoding.png)
 
@@ -12,29 +12,29 @@ The **Identifier octets** identify the *type* of thing encoded. The **Length oct
 
 ## Identifier octets
 
-The identifier octets encode the ASN.1 tag class, whether it is primitive or constructed, and tag number.
+The identifier octets encode the contents ASN.1 tag's class, whether it is primitive or constructed, and tag number.
 
 ![](docs/identifier-octet.png)
 
 ### Class
 
-The tag's class is set in bits 8 and 7 in the first octet. Possible values:
+Bits 8 and 7, of the first octet, set the tag's class.
 
-|Class|Bit 8|Bit 7|
-|-|-|-|
-|Universal|0|0|
-|Application|0|1|
-|Context-specific|1|0|
-|Private|1|1|
+|Class|Bit 8|Bit 7|Description|
+|-|-|-|-|
+|Universal|0|0|Types native to ASN.1|
+|Application|0|1|Types valid for a specific application|
+|Context-specific|1|0|Meaning depends on the context (such as within a sequence, set or choice)|
+|Private|1|1|Defined in private specifications|
 
 ### Primitive/Constructed
 
-Bit 6 sets whether the value is primitive or constructed:
+Bit 6, of the first octet, sets whether the value is primitive or constructed:
 
-|Bit 6 value||
+||Bit 6|
 |-|-|
-|0|primitive|
-|1|constructed|
+|primitive|0|
+|constructed|1|
 
 Primitive encodings represent the value directly. For instance, an `INTEGER` tag is primitive, and the underlying content value is an encoded integer.
 
@@ -42,7 +42,15 @@ Constructed encodings represent a concatenation of other encoded values.
 
 ### Tag number
 
-For tag numbers <= 30 (the universal tags), the last 5 bits are used to encode the tag number, and the identifier will be 1 octet total. For tag numbers >= 31 the last 5 bits of the first octet are encoded to `11111`. The subsequent octets are then the base 128 encoding of the tag number.
+For tag numbers <= 30 (the universal tags), the last 5 bits are used to encode the tag number, and the identifier will be 1 octet. For tag numbers >= 31 the last 5 bits of the first octet are encoded to `11111`. The subsequent octets are then the base 128 encoding of the tag number.
+
+### Explicit vs Implicit
+
+Data can be given a unique tag number (especially members of sequences and sets). This helps distinguish that data from other members. These unique tags can be either *explicit* or *implicit*.
+
+#### Explicit
+
+This is the default unique tag style. The data is fully encoded using its underlying type, which is then wrapped in an outer encoding using the unique tag.
 
 ## Length octets
 
@@ -50,65 +58,41 @@ BER supports length octets in two possible forms: definite and indefinite. **Thi
 
 ## Content Encoding
 
-### Types
+## Types
 
-|ASN.1 Type|Description|Tag|Go Types|
-|-|-|-|-|
-|`BOOLEAN`|Simple boolean value|1|`bool`|
-|`INTEGER`|A signed integer value, with no limits|2|`int`, `int8`, `int16`, `int32`, `int64`|
-|`BIT STRING`|Arbitrary string of bits|3||
-|`OCTET STRING`|A value of zero or more bytes|4|`[]byte`|
-|`OBJECT IDENTIFIER`||6|`ObjectIdentifier`|
-|`REAL`||9|`float32`, `float64`|
-|`Strings`|[See below](#strings)|[See below](#strings)|`string`|
+### Universal class
 
-### Strings
-
-ASN.1 has many string types:
-
-|Type|Tag|Description|
-|-|-|-|
-|`BMPString`|30||
-|`GeneralString`|27||
-|`GraphicString`|25||
-|`IA5String`|22|First 128 chracters of ASCII alphabet|
-|`NumericString`|18||
-|`PrintableString`|19|A restricted subset of ASCII alphabet|
-|`T61String`|20||
-|`UniversalString`|28||
-|`UTF8String`|12||
-|`VideotexString`|21||
-|`VisibleString`|26||
-
-
-## Explicit/Implicit Tags
-
-ASN.1 has `IMPLICIT` and `EXPLICIT` tags. 
-
-`IMPLICIT` tags are derived from other types by changing the tag of the underlying type. ASN.1 notation:
-
-**[*[class]* *number*]** `IMPLICIT` ***Type***
-
-***class = *** `UNIVERSAL` | `APPLICATION` | `PRIVATE`
-
-**Note**: The `IMPLICIT` keyword is optional in ASN.1 modules.
-
-If there is no class name, the tag's class is Context-specific (which can only be a component of a structured or `CHOICE` type).
-
-### Implicit Exaple
-
-ASN.1 notation:
-
-```asn1
-[5] IMPLICIT UTF8String
-```
-
-1. Encode "hi"
-2. The identifier octet would be encoded as:
-   1. `10` - Context-specific defaults
-   2. `0` - primitive
-   3. `101` - 5
+|ASN.1 Type|Description|Tag|Permitted Construction|Go Types|
+|-|-|-|-|-|
+|`BOOLEAN`|Simple boolean value|1|Primitive|`bool`|
+|`INTEGER`|A signed integer value, with no limits|2|Primitive|`int`, `int8`, `int16`, `int32`, `int64`|
+|`BIT STRING`|Arbitrary string of bits|3|Both|`string`|
+|`OCTET STRING`|A value of zero or more bytes|4|Both|`[]byte`|
+|`NULL`|A empty, non-value|5|Primitive|`asn1.Null`|
+|`OBJECT IDENTIFIER`|A sequence of integer components that identify a globally unique object|6|Primitive|`asn1.ObjectIdentifier`|
+|`REAL`|A floating point number|9|Primitive|`float32`, `float64`|
+|`ENUMERATED`|A numeric value which is associated with a particular meaning|10|Primitive|`asn1.Enumerated`|
+|`UTF8String`|UTF-8 string|12|Primitive|`string`|
+|`SEQUENCE`|A fixed number of fields of different types, ordered|16|Constructed|`struct`|
+|`SEQUENCE OF`|Arbitrary number of fields of different types, ordered|16|Constructed|`[]interface{}`|
+|`SET`|A fixed number of fields of different types, unordered|17|Constructed|`struct`|
+|`SET OF`|Arbitrary number of fields of different types, unordered|17|Constructed|`[]interface{}`|
+|`NumericString`|String representation of a numeric value|18|Primitive|`string`|
+|`PrintableString`|A restricted subset of ASCII alphabet|19|Primitive|`string`|
+|`IA5String`|First 128 characters of the ASCII alpahabet|22|Primitive|`string`|
+|`UTCTime`|Time type, as described [here](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.5.1)|23|Both|`time.Time`|
+|`GeneralizedTime`|Time type, as described [here](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.5.2)|24|Both|`time.Time`|
 
 ## Todo
 
 * Handle pointers
+* Choice type
+* Constructed strings
+
+* Sequence/Set tests
+
+## References
+
+* [A Layman's Guide to a Subset of ASN.1, BER, and DER](https://luca.ntop.org/Teaching/Appunti/asn1.html)
+* [LDAPv3 Wire Protocol Reference: The ASN.1 Basic Encoding Rules](https://ldap.com/ldapv3-wire-protocol-reference-asn1-ber/)
+* [A Warm Welcome to ASN.1 and DER](https://letsencrypt.org/docs/a-warm-welcome-to-asn1-and-der/#sequence-encoding)

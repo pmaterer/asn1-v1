@@ -60,6 +60,9 @@ func (e *Encoder) parseType(v reflect.Value) (err error) {
 		default:
 			e.encodingFunc = encodeGeneralizedTime
 		}
+	case nullType:
+		tag = TagNull
+		e.encodingFunc = encodeNull
 	}
 
 	if e.encodingFunc == nil {
@@ -69,7 +72,12 @@ func (e *Encoder) parseType(v reflect.Value) (err error) {
 			tag = TagBoolean
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			e.encodingFunc = encodeInt
-			tag = TagInteger
+			if e.options.enumerated {
+				tag = TagEnumerated
+			} else {
+				tag = TagInteger
+			}
+
 		case reflect.Float32, reflect.Float64:
 			e.encodingFunc = encodeReal
 			tag = TagReal
@@ -95,14 +103,23 @@ func (e *Encoder) parseType(v reflect.Value) (err error) {
 		case reflect.Struct:
 			e.encodingFunc = encodeStruct
 			isConstructed = true
-			tag = TagSet
+			if e.options.set {
+				tag = TagSet
+			} else {
+				tag = TagSequence
+			}
+
 		case reflect.Array, reflect.Slice:
 			if v.Type().Elem().Kind() == reflect.Uint8 {
 				e.encodingFunc = encodeOctetString
 				tag = TagOctetString
 			} else {
-				e.encodingFunc = encodeSequence
-				tag = TagSequence
+				e.encodingFunc = encodeList
+				if e.options.set {
+					tag = TagSetOf
+				} else {
+					tag = TagSequenceOf
+				}
 				isConstructed = true
 			}
 		default:
@@ -117,13 +134,13 @@ func (e *Encoder) parseType(v reflect.Value) (err error) {
 }
 
 func (e *Encoder) encode(v reflect.Value, opts string) error {
+	var err error
 
 	e.datagram = newDatagram()
-	options, err := parseOptions(opts)
+	e.options, err = parseOptions(opts)
 	if err != nil {
 		return err
 	}
-	e.options = options
 
 	err = e.parseType(v)
 	if err != nil {
@@ -136,16 +153,19 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 	}
 	e.datagram.body = body
 
-	if empty(v) {
-		if options.optional {
-			e.datagram.body = nil
-		} else {
-			return fmt.Errorf("empty body!")
-		}
+	if empty(v) && e.options.optional {
+		return nil
 	}
+	// if empty(v) {
+	// 	if e.options.optional {
+	// 		e.datagram.body = nil
+	// 	} else {
+	// 		return fmt.Errorf("empty body!")
+	// 	}
+	// }
 
-	if options.explicit {
-		if options.tag == nil {
+	if e.options.explicit {
+		if e.options.tag == nil {
 			return fmt.Errorf("flag 'explicit' requires flag 'tag' to be set")
 		}
 		body, err := e.encodingFunc(v)
@@ -166,19 +186,18 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 		e.datagram.identifier.isConstructed = true
 	}
 
-	e.datagram.identifier.class = TagClassUniversal
-	if options.tag != nil {
-		if options.application {
+	if e.options.tag != nil {
+		if e.options.application {
 			e.datagram.identifier.class = TagClassApplication
-		} else if options.private {
+		} else if e.options.private {
 			e.datagram.identifier.class = TagClassPrivate
 		} else {
 			e.datagram.identifier.class = TagClassContextSpecific
 		}
-		e.datagram.identifier.tag = Tag(*options.tag)
+		e.datagram.identifier.tag = Tag(*e.options.tag)
 	}
 
-	if options.private {
+	if e.options.private {
 		e.datagram.identifier.class = TagClassPrivate
 	}
 
@@ -190,25 +209,6 @@ func (e *Encoder) encode(v reflect.Value, opts string) error {
 	}
 
 	return nil
-
-}
-
-func encodeSequence(v reflect.Value) ([]byte, error) {
-	switch v.Kind() {
-	case reflect.Array, reflect.Slice:
-	default:
-		return nil, invalidTypeError("array/slice", v)
-	}
-
-	buf := new(bytes.Buffer)
-	for i := 0; i < v.Len(); i++ {
-		b, err := Marshal(v.Index(i).Interface())
-		if err != nil {
-			return nil, err
-		}
-		buf.Write(b)
-	}
-	return buf.Bytes(), nil
 }
 
 func invalidTypeError(expected string, value reflect.Value) error {

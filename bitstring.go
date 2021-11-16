@@ -10,7 +10,10 @@ import (
 )
 
 func isValidBitString(str string) bool {
-	for _, c := range str {
+	if str[0] != 'b' {
+		return false
+	}
+	for _, c := range str[1:] {
 		if !(c == '0' || c == '1') {
 			return false
 		}
@@ -27,11 +30,12 @@ func EncodeBitString(value reflect.Value) ([]byte, error) {
 	if !isValidBitString(bitStr) {
 		return nil, fmt.Errorf("%s not a valid bit string", bitStr)
 	}
+	bitStr = bitStr[1:]
 
-	bitLen := float64(len(bitStr))
-	octetBitLength := uint(8 * (math.Ceil(bitLen / 8.0)))
-	unusedBits := octetBitLength - uint(bitLen)
-	octetLength := octetBitLength / 8
+	bitLength := float64(len(bitStr))
+	paddedBitLength := uint(8 * (math.Ceil(bitLength / 8.0)))
+	unusedBits := paddedBitLength - uint(bitLength)
+	octetLength := paddedBitLength / 8
 
 	buf := new(bytes.Buffer)
 	buf.WriteByte(byte(unusedBits))

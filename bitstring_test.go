@@ -17,13 +17,13 @@ func TestEncodeBitString(t *testing.T) {
 		{
 			name:        "Test encode bit string",
 			expected:    []byte{0x07, 0x68, 0x80},
-			value:       "011010001",
+			value:       "b011010001",
 			errExpected: false,
 		},
 		{
 			name:        "Test encode bit string",
 			expected:    []byte{0x06, 0x6e, 0x5d, 0xc0},
-			value:       "011011100101110111",
+			value:       "b011011100101110111",
 			errExpected: false,
 		},
 		{
@@ -56,7 +56,7 @@ func TestIsValidBitString(t *testing.T) {
 		{
 			name:     "Test encode proper bit string",
 			expected: true,
-			value:    "0101101011",
+			value:    "b0101101011",
 		},
 		{
 			name:     "Test encode bad bit string",

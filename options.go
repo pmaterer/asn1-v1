@@ -11,6 +11,8 @@ type options struct {
 	optional    bool
 	application bool
 	explicit    bool
+	set         bool
+	enumerated  bool
 	stringType  Tag
 	timeType    Tag
 	tag         *int
@@ -46,6 +48,8 @@ func parseOption(opt *options, args []string) error {
 		opt.stringType = TagNumericString
 	case "utf8":
 		opt.stringType = TagUTF8String
+	case "bitstring":
+		opt.stringType = TagBitString
 	// time types
 	case "utc":
 		opt.timeType = TagUTCTime
@@ -60,6 +64,10 @@ func parseOption(opt *options, args []string) error {
 		parseTagOption(opt, args)
 	case "explicit":
 		opt.explicit = true
+	case "set":
+		opt.set = true
+	case "enumerated":
+		opt.enumerated = true
 	}
 	return nil
 }

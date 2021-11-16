@@ -9,6 +9,27 @@ type identifier struct {
 	tag           Tag
 }
 
+func (i *identifier) encode() []byte {
+	b := []byte{0x00}
+
+	b[0] |= byte(i.class << 6)
+
+	if i.isConstructed {
+		b[0] |= byte(1 << 5)
+	} else {
+		b[0] |= byte(0 << 5)
+	}
+
+	if i.tag <= 30 {
+		b[0] |= byte(i.tag)
+	} else {
+		b[0] |= byte(0x1f)
+		b = append(b, encodeBase128(uint64(i.tag))...)
+	}
+
+	return b
+}
+
 // datagram represents a BER encoded data structure
 type datagram struct {
 	identifier
@@ -31,32 +52,12 @@ func (d *datagram) encode() []byte {
 	buf := new(bytes.Buffer)
 
 	buf.Write(d.identifier.encode())
+
 	d.length = uint(len(d.body))
 	buf.Write(encodeLength(uint(d.length)))
+
 	buf.Write(d.body)
 	return buf.Bytes()
-}
-
-func (i *identifier) encode() []byte {
-	b := []byte{0x00}
-
-	b[0] |= byte(i.class << 6)
-
-	if i.isConstructed {
-		b[0] |= byte(1 << 5)
-	} else {
-		b[0] |= byte(0 << 5)
-	}
-
-	// universal tags 0-30
-	if i.tag <= 30 {
-		b[0] |= byte(i.tag)
-	} else {
-		b[0] |= byte(0x1f)
-		b = append(b, encodeBase128(uint64(i.tag))...)
-	}
-
-	return b
 }
 
 func encodeLength(length uint) []byte {

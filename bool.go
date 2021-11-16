@@ -2,6 +2,11 @@ package asn1
 
 import "reflect"
 
+var (
+	asn1True  byte = 0xff
+	asn1False byte = 0x00
+)
+
 func encodeBool(value reflect.Value) ([]byte, error) {
 	switch value.Kind() {
 	case reflect.Bool:
@@ -10,7 +15,7 @@ func encodeBool(value reflect.Value) ([]byte, error) {
 	}
 
 	if value.Bool() {
-		return []byte{0xff}, nil
+		return []byte{asn1True}, nil
 	}
-	return []byte{0x00}, nil
+	return []byte{asn1False}, nil
 }
